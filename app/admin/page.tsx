@@ -36,6 +36,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [lastRun, setLastRun] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [reprocessing, setReprocessing] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -56,9 +57,25 @@ export default function AdminPage() {
     setLoading(false);
   }
 
-  useEffect(() => {
-    fetchArticles();
-  }, []);
+async function fetchLastRun() {
+  const { data } = await supabase
+    .from("system_logs")
+    .select("*")
+    .eq("type", "last_run")
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  if (data && data.length > 0) {
+    setLastRun(data[0].value);
+  }
+}
+
+
+useEffect(() => {
+  fetchArticles();
+  fetchLastRun();
+}, []);
+
 
   function handleChange(
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -152,54 +169,66 @@ export default function AdminPage() {
   }
 
   async function handleImportNews() {
-    setImporting(true);
-    setMessage("");
+  setImporting(true);
+  setMessage("");
 
-    try {
-      const response = await fetch("/api/seed-news", {
+  try {
+    const response = await fetch("/api/seed-news", {
+      method: "POST",
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      setMessage(`자동 가져오기 실패: ${result.message}`);
+    } else {
+      await fetch("/api/save-last-run", {
         method: "POST",
       });
 
-      const result = await response.json();
+fetchLastRun();
 
-      if (!response.ok) {
-        setMessage(`자동 가져오기 실패: ${result.message}`);
-      } else {
-        setMessage(`자동 가져오기 성공: ${result.count}개 기사 추가`);
-        fetchArticles();
-      }
-    } catch (error) {
-      console.error(error);
-      setMessage("자동 가져오기 중 오류가 발생했어요.");
+      setMessage(`자동 가져오기 성공: ${result.count}개 기사 추가`);
+      fetchArticles();
+      fetchLastRun();
     }
-
-    setImporting(false);
+  } catch (error) {
+    console.error(error);
+    setMessage("자동 가져오기 중 오류가 발생했어요.");
   }
 
-  async function handleReprocessNews() {
-    setReprocessing(true);
-    setMessage("");
+  setImporting(false);
+}
 
-    try {
-      const response = await fetch("/api/reprocess-news", {
-        method: "POST",
-      });
 
-      const result = await response.json();
 
-      if (!response.ok) {
-        setMessage(`기존 기사 다시 정리 실패: ${result.message}`);
-      } else {
-        setMessage(`기존 기사 다시 정리 성공: ${result.count}개 기사 업데이트`);
-        fetchArticles();
-      }
-    } catch (error) {
-      console.error(error);
-      setMessage("기존 기사 다시 정리 중 오류가 발생했어요.");
+async function handleReprocessNews() {
+  setReprocessing(true);
+  setMessage("");
+
+  try {
+    const response = await fetch("/api/reprocess-news", {
+      method: "POST",
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      setMessage(`기존 기사 다시 정리 실패: ${result.message}`);
+    } else {
+      setMessage(`기존 기사 다시 정리 성공: ${result.count}개 기사 업데이트`);
+      fetchArticles();
+      fetchLastRun();
     }
-
-    setReprocessing(false);
+  } catch (error) {
+    console.error(error);
+    setMessage("기존 기사 다시 정리 중 오류가 발생했어요.");
   }
+
+  setReprocessing(false);
+}
+
+
 
   return (
     <main style={{ maxWidth: "1200px", margin: "0 auto", padding: "40px 20px" }}>
@@ -216,13 +245,19 @@ export default function AdminPage() {
           Admin Page
         </p>
 
-        <h1 style={{ fontSize: "32px", fontWeight: "bold", marginBottom: "12px" }}>
-          관리자 페이지
-        </h1>
+      <h1 style={{ fontSize: "32px", fontWeight: "bold", marginBottom: "12px", color: "red" }}>
+  관리자 페이지 TEST123
+</h1>
 
         <p style={{ color: "#475569", lineHeight: "1.7", margin: 0 }}>
           기사 추가, 수정, 삭제, 자동 가져오기가 가능한 페이지입니다.
         </p>
+
+{lastRun && (
+  <p style={{ marginTop: "10px", color: "#64748b", fontSize: "14px" }}>
+    마지막 자동수집: {new Date(lastRun).toLocaleString()}
+  </p>
+)}
 
         <div style={{ marginTop: "16px", display: "flex", gap: "10px", flexWrap: "wrap" }}>
           <Link

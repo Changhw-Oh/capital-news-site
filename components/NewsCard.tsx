@@ -82,6 +82,14 @@ export default function NewsCard({ article }: { article: Article }) {
           marginBottom: "14px",
         }}
       >
+       
+       <Link
+        href={`/company/${encodeURIComponent(article.company)}`}
+       style={{ textDecoration: "none" }}
+         >
+       <InfoBadge label="회사명" value={article.company} />
+       </Link>
+       
         <InfoBadge label="회사명" value={article.company} />
         <InfoBadge label="금액" value={article.amount} />
         <InfoBadge label="방식" value={article.method} />

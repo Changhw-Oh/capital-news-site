@@ -23,6 +23,10 @@ export async function GET(request: NextRequest) {
     });
     const reprocessResult = await reprocessResponse.json();
 
+await fetch(`${baseUrl}/api/save-last-run`, {
+  method: "POST",
+});
+
     return NextResponse.json({
       success: true,
       message: "하루 1번 자동수집이 완료됐어요.",
