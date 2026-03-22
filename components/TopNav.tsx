@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 const menus = [
   { href: "/", label: "홈" },
+  { href: "/dashboard", label: "대시보드" },
   { href: "/admin", label: "관리자" },
   { href: "/today", label: "오늘의 자금조달 뉴스" },
   { href: "/weekly", label: "이번 주 메자닌 이슈" },

@@ -5,6 +5,7 @@ import Link from "next/link";
 import NewsCard from "../components/NewsCard";
 import SearchBox from "../components/SearchBox";
 import CategoryFilter from "../components/CategoryFilter";
+import SortBox from "../components/SortBox";
 import { supabase } from "../lib/supabase";
 
 type Article = {
@@ -35,9 +36,34 @@ function getLast7DaysDates() {
   return dates;
 }
 
+function parseAmountToEok(amount: string) {
+  if (!amount || amount === "미확인") return 0;
+
+  const cleaned = amount.replace(/\s/g, "");
+
+  const joMatch = cleaned.match(/([\d,.]+)조원?/);
+  if (joMatch) {
+    return Number(joMatch[1].replace(/,/g, "")) * 10000;
+  }
+
+  const eokMatch = cleaned.match(/([\d,.]+)억원?/);
+  if (eokMatch) {
+    return Number(eokMatch[1].replace(/,/g, ""));
+  }
+
+  const wonMatch = cleaned.match(/([\d,.]+)원/);
+  if (wonMatch) {
+    const won = Number(wonMatch[1].replace(/,/g, ""));
+    return won / 100000000;
+  }
+
+  return 0;
+}
+
 export default function HomePage() {
   const [searchText, setSearchText] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("전체");
+  const [sortType, setSortType] = useState("latest");
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -64,7 +90,7 @@ export default function HomePage() {
   }, []);
 
   const filteredArticles = useMemo(() => {
-    return articles.filter((article) => {
+    const filtered = articles.filter((article) => {
       const searchTarget =
         `${article.title} ${article.summary} ${article.source} ${article.company} ${article.amount} ${article.method}`.toLowerCase();
 
@@ -75,10 +101,29 @@ export default function HomePage() {
 
       return matchesSearch && matchesCategory;
     });
-  }, [articles, searchText, selectedCategory]);
+
+    const sorted = [...filtered];
+
+    if (sortType === "latest") {
+      sorted.sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
+    } else if (sortType === "oldest") {
+      sorted.sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
+    } else if (sortType === "amount_desc") {
+      sorted.sort(
+        (a, b) => parseAmountToEok(b.amount) - parseAmountToEok(a.amount)
+      );
+    } else if (sortType === "company_asc") {
+      sorted.sort((a, b) => a.company.localeCompare(b.company, "ko"));
+    }
+
+    return sorted;
+  }, [articles, searchText, selectedCategory, sortType]);
 
   const todayArticles = useMemo(() => {
-    return articles.filter((article) => article.date === today).slice(0, 3);
+    return articles
+      .filter((article) => article.date === today)
+      .sort((a, b) => b.id - a.id)
+      .slice(0, 3);
   }, [articles, today]);
 
   const weeklyMezzanineArticles = useMemo(() => {
@@ -87,6 +132,7 @@ export default function HomePage() {
         (article) =>
           article.category === "메자닌" && last7Days.includes(article.date)
       )
+      .sort((a, b) => b.id - a.id)
       .slice(0, 3);
   }, [articles, last7Days]);
 
@@ -143,7 +189,7 @@ export default function HomePage() {
           }}
         >
           유상증자, CB, BW, EB, 메자닌, 투자유치 관련 기사를 한 곳에서 모아보고
-          검색과 카테고리 필터로 빠르게 확인할 수 있는 자본시장 뉴스 사이트입니다.
+          검색과 카테고리 필터, 정렬 기능으로 빠르게 확인할 수 있는 자본시장 뉴스 사이트입니다.
         </p>
       </section>
 
@@ -159,6 +205,10 @@ export default function HomePage() {
       >
         <div style={{ marginBottom: "16px" }}>
           <SearchBox value={searchText} onChange={setSearchText} />
+        </div>
+
+        <div style={{ marginBottom: "16px" }}>
+          <SortBox value={sortType} onChange={setSortType} />
         </div>
 
         <CategoryFilter

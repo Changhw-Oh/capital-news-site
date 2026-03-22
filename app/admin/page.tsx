@@ -245,8 +245,8 @@ async function handleReprocessNews() {
           Admin Page
         </p>
 
-      <h1 style={{ fontSize: "32px", fontWeight: "bold", marginBottom: "12px", color: "red" }}>
-  관리자 페이지 TEST123
+      <h1 style={{ fontSize: "32px", fontWeight: "bold", marginBottom: "12px" }}>
+  관리자 페이지
 </h1>
 
         <p style={{ color: "#475569", lineHeight: "1.7", margin: 0 }}>
