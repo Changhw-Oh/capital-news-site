@@ -31,15 +31,35 @@ const emptyForm = {
   link: "",
 };
 
+function parseAmountToEok(amount: string) {
+  if (!amount || amount === "미확인") return 0;
+
+  const cleaned = amount.replace(/\s/g, "");
+
+  const joMatch = cleaned.match(/([\d,.]+)조원?/);
+  if (joMatch) {
+    return Number(joMatch[1].replace(/,/g, "")) * 10000;
+  }
+
+  const eokMatch = cleaned.match(/([\d,.]+)억원?/);
+  if (eokMatch) {
+    return Number(eokMatch[1].replace(/,/g, ""));
+  }
+
+  return 0;
+}
+
 export default function AdminPage() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
-  const [lastRun, setLastRun] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [reprocessing, setReprocessing] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [lastRun, setLastRun] = useState<string | null>(null);
+  const [searchText, setSearchText] = useState("");
+  const [sortType, setSortType] = useState("latest");
   const [form, setForm] = useState(emptyForm);
 
   async function fetchArticles() {
@@ -57,25 +77,23 @@ export default function AdminPage() {
     setLoading(false);
   }
 
-async function fetchLastRun() {
-  const { data } = await supabase
-    .from("system_logs")
-    .select("*")
-    .eq("type", "last_run")
-    .order("created_at", { ascending: false })
-    .limit(1);
+  async function fetchLastRun() {
+    const { data } = await supabase
+      .from("system_logs")
+      .select("*")
+      .eq("type", "last_run")
+      .order("created_at", { ascending: false })
+      .limit(1);
 
-  if (data && data.length > 0) {
-    setLastRun(data[0].value);
+    if (data && data.length > 0) {
+      setLastRun(data[0].value);
+    }
   }
-}
 
-
-useEffect(() => {
-  fetchArticles();
-  fetchLastRun();
-}, []);
-
+  useEffect(() => {
+    fetchArticles();
+    fetchLastRun();
+  }, []);
 
   function handleChange(
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -169,66 +187,95 @@ useEffect(() => {
   }
 
   async function handleImportNews() {
-  setImporting(true);
-  setMessage("");
+    setImporting(true);
+    setMessage("");
 
-  try {
-    const response = await fetch("/api/seed-news", {
-      method: "POST",
-    });
-
-    const result = await response.json();
-
-    if (!response.ok) {
-      setMessage(`자동 가져오기 실패: ${result.message}`);
-    } else {
-      await fetch("/api/save-last-run", {
+    try {
+      const response = await fetch("/api/seed-news", {
         method: "POST",
       });
 
-fetchLastRun();
+      const result = await response.json();
 
-      setMessage(`자동 가져오기 성공: ${result.count}개 기사 추가`);
-      fetchArticles();
-      fetchLastRun();
+      if (!response.ok) {
+        setMessage(`자동 가져오기 실패: ${result.message}`);
+      } else {
+        await fetch("/api/save-last-run", {
+          method: "POST",
+        });
+
+        setMessage(`자동 가져오기 성공: ${result.count}개 기사 추가`);
+        fetchArticles();
+        fetchLastRun();
+      }
+    } catch (error) {
+      console.error(error);
+      setMessage("자동 가져오기 중 오류가 발생했어요.");
     }
-  } catch (error) {
-    console.error(error);
-    setMessage("자동 가져오기 중 오류가 발생했어요.");
+
+    setImporting(false);
   }
 
-  setImporting(false);
-}
+  async function handleReprocessNews() {
+    setReprocessing(true);
+    setMessage("");
 
+    try {
+      const response = await fetch("/api/reprocess-news", {
+        method: "POST",
+      });
 
+      const result = await response.json();
 
-async function handleReprocessNews() {
-  setReprocessing(true);
-  setMessage("");
+      if (!response.ok) {
+        setMessage(`기존 기사 다시 정리 실패: ${result.message}`);
+      } else {
+        setMessage(`기존 기사 다시 정리 성공: ${result.count}개 기사 업데이트`);
+        fetchArticles();
+        fetchLastRun();
+      }
+    } catch (error) {
+      console.error(error);
+      setMessage("기존 기사 다시 정리 중 오류가 발생했어요.");
+    }
 
-  try {
-    const response = await fetch("/api/reprocess-news", {
+    setReprocessing(false);
+  }
+
+  async function handleLogout() {
+    await fetch("/api/admin-logout", {
       method: "POST",
     });
 
-    const result = await response.json();
-
-    if (!response.ok) {
-      setMessage(`기존 기사 다시 정리 실패: ${result.message}`);
-    } else {
-      setMessage(`기존 기사 다시 정리 성공: ${result.count}개 기사 업데이트`);
-      fetchArticles();
-      fetchLastRun();
-    }
-  } catch (error) {
-    console.error(error);
-    setMessage("기존 기사 다시 정리 중 오류가 발생했어요.");
+    window.location.href = "/admin/login";
   }
 
-  setReprocessing(false);
-}
+  const filteredArticles = [...articles]
+    .filter((article) => {
+      const target =
+        `${article.company} ${article.title} ${article.category} ${article.method} ${article.amount} ${article.source}`.toLowerCase();
 
+      return target.includes(searchText.toLowerCase());
+    })
+    .sort((a, b) => {
+      if (sortType === "latest") {
+        return b.date.localeCompare(a.date) || b.id - a.id;
+      }
 
+      if (sortType === "oldest") {
+        return a.date.localeCompare(b.date) || a.id - b.id;
+      }
+
+      if (sortType === "amount_desc") {
+        return parseAmountToEok(b.amount) - parseAmountToEok(a.amount);
+      }
+
+      if (sortType === "company_asc") {
+        return a.company.localeCompare(b.company, "ko");
+      }
+
+      return 0;
+    });
 
   return (
     <main style={{ maxWidth: "1200px", margin: "0 auto", padding: "40px 20px" }}>
@@ -245,19 +292,19 @@ async function handleReprocessNews() {
           Admin Page
         </p>
 
-      <h1 style={{ fontSize: "32px", fontWeight: "bold", marginBottom: "12px" }}>
-  관리자 페이지
-</h1>
+        <h1 style={{ fontSize: "32px", fontWeight: "bold", marginBottom: "12px" }}>
+          관리자 페이지
+        </h1>
 
         <p style={{ color: "#475569", lineHeight: "1.7", margin: 0 }}>
           기사 추가, 수정, 삭제, 자동 가져오기가 가능한 페이지입니다.
         </p>
 
-{lastRun && (
-  <p style={{ marginTop: "10px", color: "#64748b", fontSize: "14px" }}>
-    마지막 자동수집: {new Date(lastRun).toLocaleString()}
-  </p>
-)}
+        {lastRun && (
+          <p style={{ marginTop: "10px", color: "#64748b", fontSize: "14px" }}>
+            마지막 자동수집: {new Date(lastRun).toLocaleString()}
+          </p>
+        )}
 
         <div style={{ marginTop: "16px", display: "flex", gap: "10px", flexWrap: "wrap" }}>
           <Link
@@ -303,6 +350,22 @@ async function handleReprocessNews() {
             }}
           >
             {reprocessing ? "정리 중..." : "기존 기사 다시 정리하기"}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleLogout}
+            style={{
+              padding: "10px 14px",
+              borderRadius: "10px",
+              border: "none",
+              backgroundColor: "#334155",
+              color: "#ffffff",
+              fontWeight: "bold",
+              cursor: "pointer",
+            }}
+          >
+            로그아웃
           </button>
         </div>
       </div>
@@ -420,6 +483,58 @@ async function handleReprocessNews() {
         </form>
       </div>
 
+      <div
+        style={{
+          marginBottom: "24px",
+          backgroundColor: "#ffffff",
+          border: "1px solid #e2e8f0",
+          borderRadius: "20px",
+          padding: "20px",
+        }}
+      >
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "2fr 1fr",
+            gap: "14px",
+          }}
+        >
+          <input
+            type="text"
+            placeholder="회사명, 제목, 카테고리, 방식 검색"
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            style={{
+              width: "100%",
+              padding: "14px",
+              border: "1px solid #cbd5e1",
+              borderRadius: "12px",
+              fontSize: "16px",
+              boxSizing: "border-box",
+            }}
+          />
+
+          <select
+            value={sortType}
+            onChange={(e) => setSortType(e.target.value)}
+            style={{
+              width: "100%",
+              padding: "14px",
+              border: "1px solid #cbd5e1",
+              borderRadius: "12px",
+              fontSize: "16px",
+              boxSizing: "border-box",
+              backgroundColor: "#ffffff",
+            }}
+          >
+            <option value="latest">최신순</option>
+            <option value="oldest">오래된순</option>
+            <option value="amount_desc">금액 큰 순</option>
+            <option value="company_asc">회사명순</option>
+          </select>
+        </div>
+      </div>
+
       {loading ? (
         <div
           style={{
@@ -456,7 +571,7 @@ async function handleReprocessNews() {
             </thead>
 
             <tbody>
-              {articles.map((article) => (
+              {filteredArticles.map((article) => (
                 <tr key={article.id}>
                   <td style={tdStyle}>{article.id}</td>
                   <td style={tdStyle}>{article.company}</td>
