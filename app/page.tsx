@@ -60,6 +60,14 @@ function parseAmountToEok(amount: string) {
   return 0;
 }
 
+function formatEok(value: number) {
+  if (value >= 10000) {
+    return `${(value / 10000).toFixed(1)}조원`;
+  }
+
+  return `${value.toLocaleString()}억원`;
+}
+
 export default function HomePage() {
   const [searchText, setSearchText] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("전체");
@@ -135,6 +143,34 @@ export default function HomePage() {
       .sort((a, b) => b.id - a.id)
       .slice(0, 3);
   }, [articles, last7Days]);
+
+  const topCompaniesByCount = useMemo(() => {
+    const counts: Record<string, number> = {};
+
+    for (const article of articles) {
+      const company = article.company || "미확인";
+      counts[company] = (counts[company] || 0) + 1;
+    }
+
+    return Object.entries(counts)
+      .map(([company, count]) => ({ company, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+  }, [articles]);
+
+  const topCompaniesByAmount = useMemo(() => {
+    const sums: Record<string, number> = {};
+
+    for (const article of articles) {
+      const company = article.company || "미확인";
+      sums[company] = (sums[company] || 0) + parseAmountToEok(article.amount);
+    }
+
+    return Object.entries(sums)
+      .map(([company, amount]) => ({ company, amount }))
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 5);
+  }, [articles]);
 
   return (
     <main
@@ -231,6 +267,112 @@ export default function HomePage() {
         description="최근 7일 기준 메자닌 기사 중 최신 3건을 미리 보여줍니다."
         articles={weeklyMezzanineArticles}
       />
+
+      <section style={{ marginBottom: "30px" }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: "18px",
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: "#ffffff",
+              border: "1px solid #e2e8f0",
+              borderRadius: "18px",
+              padding: "22px",
+              boxShadow: "0 6px 18px rgba(15, 23, 42, 0.04)",
+            }}
+          >
+            <h2 style={{ marginTop: 0, marginBottom: "16px", color: "#0f172a" }}>
+              주요 회사 TOP 5
+            </h2>
+
+            {topCompaniesByCount.length === 0 ? (
+              <p style={{ margin: 0, color: "#64748b" }}>데이터가 없습니다.</p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                {topCompaniesByCount.map((item, index) => (
+                  <div
+                    key={`${item.company}-${index}`}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      borderBottom: "1px solid #e2e8f0",
+                      paddingBottom: "10px",
+                    }}
+                  >
+                    <Link
+                      href={`/company/${encodeURIComponent(item.company)}`}
+                      style={{
+                        textDecoration: "none",
+                        color: "#0f172a",
+                        fontWeight: "bold",
+                      }}
+                    >
+                      {index + 1}. {item.company}
+                    </Link>
+
+                    <span style={{ color: "#64748b", fontWeight: "bold" }}>
+                      {item.count}건
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div
+            style={{
+              backgroundColor: "#ffffff",
+              border: "1px solid #e2e8f0",
+              borderRadius: "18px",
+              padding: "22px",
+              boxShadow: "0 6px 18px rgba(15, 23, 42, 0.04)",
+            }}
+          >
+            <h2 style={{ marginTop: 0, marginBottom: "16px", color: "#0f172a" }}>
+              누적 조달금액 TOP 5
+            </h2>
+
+            {topCompaniesByAmount.length === 0 ? (
+              <p style={{ margin: 0, color: "#64748b" }}>데이터가 없습니다.</p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                {topCompaniesByAmount.map((item, index) => (
+                  <div
+                    key={`${item.company}-${index}`}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      borderBottom: "1px solid #e2e8f0",
+                      paddingBottom: "10px",
+                    }}
+                  >
+                    <Link
+                      href={`/company/${encodeURIComponent(item.company)}`}
+                      style={{
+                        textDecoration: "none",
+                        color: "#0f172a",
+                        fontWeight: "bold",
+                      }}
+                    >
+                      {index + 1}. {item.company}
+                    </Link>
+
+                    <span style={{ color: "#64748b", fontWeight: "bold" }}>
+                      {formatEok(item.amount)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
 
       <section
         style={{

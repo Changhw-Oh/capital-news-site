@@ -4,8 +4,11 @@ import { supabase } from "../../../lib/supabase";
 
 const parser = new Parser();
 
-const RSS_URL =
-  "https://news.google.com/rss/search?q=%EC%9C%A0%EC%83%81%EC%A6%9D%EC%9E%90+OR+%EC%A0%84%ED%99%98%EC%82%AC%EC%B1%84+OR+CB+OR+BW+OR+EB+OR+%EA%B5%90%ED%99%98%EC%82%AC%EC%B1%84+OR+%EC%8B%A0%EC%A3%BC%EC%9D%B8%EC%88%98%EA%B6%8C%EB%B6%80%EC%82%AC%EC%B1%84+OR+%EB%A9%94%EC%9E%90%EB%8B%8C+OR+RCPS+OR+CPS+OR+%EC%A0%9C3%EC%9E%90%EB%B0%B0%EC%A0%95+OR+%EC%A3%BC%EC%A3%BC%EB%B0%B0%EC%A0%95&hl=ko&gl=KR&ceid=KR:ko";
+const RSS_URLS = [
+  "https://news.google.com/rss/search?q=%EC%9C%A0%EC%83%81%EC%A6%9D%EC%9E%90+OR+%EC%A0%9C3%EC%9E%90%EB%B0%B0%EC%A0%95+OR+%EC%A3%BC%EC%A3%BC%EB%B0%B0%EC%A0%95&hl=ko&gl=KR&ceid=KR:ko",
+  "https://news.google.com/rss/search?q=%EC%A0%84%ED%99%98%EC%82%AC%EC%B1%84+OR+CB+OR+BW+OR+EB+OR+%EA%B5%90%ED%99%98%EC%82%AC%EC%B1%84+OR+%EC%8B%A0%EC%A3%BC%EC%9D%B8%EC%88%98%EA%B6%8C%EB%B6%80%EC%82%AC%EC%B1%84&hl=ko&gl=KR&ceid=KR:ko",
+  "https://news.google.com/rss/search?q=%EB%A9%94%EC%9E%90%EB%8B%8C+OR+RCPS+OR+CPS+OR+%EC%A0%84%ED%99%98%EC%9A%B0%EC%84%A0%EC%A3%BC+OR+Pre-IPO+OR+%ED%88%AC%EC%9E%90%EC%9C%A0%EC%B9%98&hl=ko&gl=KR&ceid=KR:ko"
+];
 
 function guessCategory(text: string) {
   const lower = text.toLowerCase();
@@ -157,33 +160,50 @@ function guessCompany(title: string) {
 
 export async function POST() {
   try {
-    const feed = await parser.parseURL(RSS_URL);
+    
+const allItems = [];
 
-    const rssArticles = (feed.items || []).slice(0, 10).map((item) => {
-      const title = item.title || "제목 없음";
-      const summary =
-        item.contentSnippet || item.content || item.summary || "요약 없음";
-      const link = item.link || "";
-      const source = feed.title || "Google News RSS";
-      const date = item.pubDate
-        ? new Date(item.pubDate).toISOString().slice(0, 10)
-        : new Date().toISOString().slice(0, 10);
+for (const url of RSS_URLS) {
+  try {
+    const feed = await parser.parseURL(url);
 
-      const combinedText = `${title} ${summary}`.replace(/\s+/g, " ").trim();
+    for (const item of (feed.items || []).slice(0, 10)) {
+      allItems.push({
+        item,
+        feedTitle: feed.title || "Google News RSS",
+      });
+    }
+  } catch (error) {
+    console.error("RSS 읽기 실패:", url, error);
+  }
+}
 
-      return {
-        company: guessCompany(title),
-        amount: guessAmount(combinedText),
-        method: guessMethod(combinedText),
-        category: guessCategory(combinedText),
-        source,
-        date,
-        title,
-        summary,
-        content: summary,
-        link,
-      };
-    });
+const rssArticles = allItems.map(({ item, feedTitle }) => {
+  const title = item.title || "제목 없음";
+  const summary =
+    item.contentSnippet || item.content || item.summary || "요약 없음";
+  const link = item.link || "";
+  const source = feedTitle;
+  const date = item.pubDate
+    ? new Date(item.pubDate).toISOString().slice(0, 10)
+    : new Date().toISOString().slice(0, 10);
+
+  const combinedText = `${title} ${summary}`.replace(/\s+/g, " ").trim();
+
+  return {
+    company: guessCompany(title),
+    amount: guessAmount(combinedText),
+    method: guessMethod(combinedText),
+    category: guessCategory(combinedText),
+    source,
+    date,
+    title,
+    summary,
+    content: summary,
+    link,
+  };
+});
+
 
     const { data: existingArticles, error: selectError } = await supabase
       .from("articles")

@@ -4,6 +4,19 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import NewsCard from "../../../components/NewsCard";
 import { supabase } from "../../../lib/supabase";
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+} from "recharts";
 
 type Article = {
   id: number;
@@ -18,6 +31,52 @@ type Article = {
   content: string;
   link: string;
 };
+
+const PIE_COLORS = ["#2563eb", "#0f172a", "#7c3aed", "#dc2626", "#059669"];
+
+function parseAmountToEok(amount: string) {
+  if (!amount || amount === "미확인") return 0;
+
+  const cleaned = amount.replace(/\s/g, "");
+
+  const joMatch = cleaned.match(/([\d,.]+)조원?/);
+  if (joMatch) {
+    return Number(joMatch[1].replace(/,/g, "")) * 10000;
+  }
+
+  const eokMatch = cleaned.match(/([\d,.]+)억원?/);
+  if (eokMatch) {
+    return Number(eokMatch[1].replace(/,/g, ""));
+  }
+
+  const wonMatch = cleaned.match(/([\d,.]+)원/);
+  if (wonMatch) {
+    const won = Number(wonMatch[1].replace(/,/g, ""));
+    return won / 100000000;
+  }
+
+  return 0;
+}
+
+function formatEok(value: number) {
+  if (value >= 10000) {
+    return `${(value / 10000).toFixed(1)}조원`;
+  }
+
+  return `${value.toLocaleString()}억원`;
+}
+
+function getLast7Days() {
+  const dates: string[] = [];
+
+  for (let i = 6; i >= 0; i -= 1) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    dates.push(d.toISOString().slice(0, 10));
+  }
+
+  return dates;
+}
 
 export default function CompanyPage({
   params,
@@ -53,15 +112,51 @@ export default function CompanyPage({
   }, [params]);
 
   const stats = useMemo(() => {
+    const total = articles.length;
+    const rights = articles.filter((a) => a.category === "유상증자").length;
+    const cb = articles.filter((a) => a.category === "CB").length;
+    const bw = articles.filter((a) => a.category === "BW").length;
+    const eb = articles.filter((a) => a.category === "EB").length;
+    const mezzanine = articles.filter((a) => a.category === "메자닌").length;
+
+    const totalAmountEok = articles.reduce(
+      (sum, article) => sum + parseAmountToEok(article.amount),
+      0
+    );
+
     return {
-      total: articles.length,
-      cb: articles.filter((a) => a.category === "CB").length,
-      bw: articles.filter((a) => a.category === "BW").length,
-      eb: articles.filter((a) => a.category === "EB").length,
-      rights: articles.filter((a) => a.category === "유상증자").length,
-      mezzanine: articles.filter((a) => a.category === "메자닌").length,
+      total,
+      rights,
+      cb,
+      bw,
+      eb,
+      mezzanine,
+      totalAmountEok,
     };
   }, [articles]);
+
+  const trendData = useMemo(() => {
+    const dates = getLast7Days();
+
+    return dates.map((date) => {
+      const count = articles.filter((article) => article.date === date).length;
+
+      return {
+        date,
+        count,
+      };
+    });
+  }, [articles]);
+
+  const pieData = useMemo(() => {
+    return [
+      { name: "유상증자", value: stats.rights },
+      { name: "CB", value: stats.cb },
+      { name: "BW", value: stats.bw },
+      { name: "EB", value: stats.eb },
+      { name: "메자닌", value: stats.mezzanine },
+    ].filter((item) => item.value > 0);
+  }, [stats]);
 
   return (
     <main
@@ -140,12 +235,84 @@ export default function CompanyPage({
           marginBottom: "24px",
         }}
       >
-        <StatCard label="전체 기사" value={stats.total} />
+        <StatCard label="전체 기사 수" value={stats.total} />
+        <StatCard label="누적 조달금액" value={formatEok(stats.totalAmountEok)} />
         <StatCard label="유상증자" value={stats.rights} />
         <StatCard label="CB" value={stats.cb} />
         <StatCard label="BW" value={stats.bw} />
         <StatCard label="EB" value={stats.eb} />
         <StatCard label="메자닌" value={stats.mezzanine} />
+      </section>
+
+      <section
+        style={{
+          backgroundColor: "#ffffff",
+          border: "1px solid #e2e8f0",
+          borderRadius: "18px",
+          padding: "22px",
+          boxShadow: "0 6px 18px rgba(15, 23, 42, 0.04)",
+          marginBottom: "24px",
+        }}
+      >
+        <h2 style={{ marginTop: 0, marginBottom: "16px", color: "#0f172a" }}>
+          최근 7일 기사 수 추이
+        </h2>
+
+        <div style={{ width: "100%", height: "300px" }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={trendData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="date" />
+              <YAxis allowDecimals={false} />
+              <Tooltip />
+              <Line type="monotone" dataKey="count" strokeWidth={3} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </section>
+
+      <section
+        style={{
+          backgroundColor: "#ffffff",
+          border: "1px solid #e2e8f0",
+          borderRadius: "18px",
+          padding: "22px",
+          boxShadow: "0 6px 18px rgba(15, 23, 42, 0.04)",
+          marginBottom: "24px",
+        }}
+      >
+        <h2 style={{ marginTop: 0, marginBottom: "16px", color: "#0f172a" }}>
+          방식 비중
+        </h2>
+
+        {pieData.length === 0 ? (
+          <p style={{ color: "#64748b", margin: 0 }}>표시할 데이터가 없습니다.</p>
+        ) : (
+          <div style={{ width: "100%", height: "340px" }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={pieData}
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={110}
+                  dataKey="value"
+                  nameKey="name"
+                  label
+                >
+                  {pieData.map((entry, index) => (
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={PIE_COLORS[index % PIE_COLORS.length]}
+                    />
+                  ))}
+                </Pie>
+                <Tooltip />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </section>
 
       {loading ? (
@@ -190,7 +357,7 @@ export default function CompanyPage({
   );
 }
 
-function StatCard({ label, value }: { label: string; value: number }) {
+function StatCard({ label, value }: { label: string; value: number | string }) {
   return (
     <div
       style={{

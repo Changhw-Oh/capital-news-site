@@ -1,3 +1,4 @@
+import Footer from "../components/Footer";
 import "./globals.css";
 import type { Metadata } from "next";
 import TopNav from "../components/TopNav";
@@ -14,10 +15,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko">
+
       <body style={{ margin: 0, backgroundColor: "#f8fafc", color: "#0f172a" }}>
         <TopNav />
         {children}
+        <Footer />
       </body>
+
     </html>
   );
 }
